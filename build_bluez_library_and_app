@@ -2,26 +2,39 @@
 
 LOGFILE=build.log
 CC=arm-bcm2708-linux-gnueabi-gcc
+ARQUITECTURA_DEL_SISTEMA=arm-linux
+ARQUITECTURA_DEL_PC=i686-pc-linux-gnu
 BLUEZ_LIB_SRC_DIR=/home/mikel/Desktop/BLUETOOTH/bluez-libs-3.36
 BLUEZ_APP_SRC_DIR=/home/mikel/Desktop/BLUETOOTH/APP_BLUETOOTH
 BLUEZ_LIB_INSTALL_DIR=/home/mikel/Desktop/Bluez_5
+BLUETOOTH_AUTOCONF=/home/mikel/Desktop/BLUETOOTH_AUTOCONF
 
 cd $BLUEZ_LIB_SRC_DIR
 echo BLUEZ Konfigurazioa garbitzen
 make distclean  &> $LOGFILE
 #check_error $? "Errorea BLUEZ konfiguratzen"
 echo BLUEZ Konfiguratzen
-./configure --build=i686-pc-linux-gnu --host=arm-linux --prefix=$BLUEZ_LIB_INSTALL_DIR CC=$CC --sysconfdir=/etc/bluez &>> $LOGFILE
+./configure --build=$ARQUITECTURA_DEL_PC --host=$ARQUITECTURA_DEL_SISTEMA --prefix=$BLUEZ_LIB_INSTALL_DIR CC=$CC --sysconfdir=/etc/bluez &>> $LOGFILE
 echo BLUEZ eraikitzen
 make  &>> $LOGFILE
-echo BLUEZ instalatzen
+echo BLUEZ instalatzen/home/mikel/Desktop
 make install &>> $LOGFILE
 
-cd $BLUEZ_APP_SRC_DIR
-echo Aplikazioa eraikitzen
+cd $BLUETOOTH_AUTOCONF
+
+echo Apliakzioaren konfigurazioa garbitzen
+make distclean  &> $LOGFILE
+
+echo Aplikazioa konfiguratzen
 
 #konpilatzeko orduan -static agindua jarri bertako libreriekin eraikitzeko, era horretara eraikitzen den exekutableak, behar dituen libreria guztiak izango ditu kanpokoak hartu beharrean. Ez dago kanpoko librerien beharrik.
-$CC -static main.c registrar_rfcomm.c -o SDP_servidor_ARM -L$BLUEZ_LIB_INSTALL_DIR/lib -I$BLUEZ_LIB_INSTALL_DIR/include -lbluetooth -lpthread  &>> $LOGFILE
+#$CC -static main.c registrar_rfcomm.c -o SDP_servidor_ARM -L$BLUEZ_LIB_INSTALL_DIR/lib -I$BLUEZ_LIB_INSTALL_DIR/include -lbluetooth -lpthread  &>> $LOGFILE
 
+./configure --build=$ARQUITECTURA_DEL_PC --host=$ARQUITECTURA_DEL_SISTEMA --prefix=$BLUETOOTH_AUTOCONF/APP CC=$CC &>> $LOGFILE
 
-#se deberia de ejecutar el ./configure de la aplicacion, una vez que se haya escrito
+echo Aplikazioa eraikitzen
+make  &>> $LOGFILE
+
+echo Aplikazioa instalatzen
+make install &>> $LOGFILE
+
