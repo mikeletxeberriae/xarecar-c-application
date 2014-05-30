@@ -45,9 +45,12 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_app_OBJECTS = main.$(OBJEXT) registrar_rfcomm.$(OBJEXT)
+am_app_OBJECTS = app-main.$(OBJEXT) app-registrar_rfcomm.$(OBJEXT)
 app_OBJECTS = $(am_app_OBJECTS)
-app_DEPENDENCIES =
+am__DEPENDENCIES_1 =
+app_DEPENDENCIES = $(am__DEPENDENCIES_1)
+app_LINK = $(CCLD) $(app_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o \
+	$@
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -67,6 +70,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BlueZ_CFLAGS = @BlueZ_CFLAGS@
+BlueZ_LIBS = @BlueZ_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -98,6 +103,10 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PKG_CONFIG = @PKG_CONFIG@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+SAVED_LDFLAGS = @SAVED_LDFLAGS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -146,11 +155,9 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 
 #se especifica al linker que objetos externos añadir, en este caso la libreria de BLUEZ y la libreria de POSIX
-app_LDADD = -lbluetooth -lpthread
-
-#se espefican los directorios de includes y de la libreria de BLUEZ. No se especifica el directorio de la libreria de POXIS, dado que se encuentra en el directorio estandar. Ademas se añade el flag "-static" para indicar que la compilacion se haga estaticamente, dentro del binario se ejecutara todo lo necesario sin tener que recurrir despues a elementos externos, de esta forma se evitarán posibles incompatibilidades.
-AM_LDFLAGS = -static -I/home/mikel/Desktop/Bluez_5/include/bluetooth -L/home/mikel/Desktop/Bluez_5/lib
-
+app_LDADD = ${BlueZ_LIBS} -lpthread
+app_CFLAGS = ${BlueZ_CFLAGS}
+AM_LDFLAGS = ${SAVED_LDFLAGS}
 #se especifican las fuentes con las que se construirá el binario espeficiado.
 app_SOURCES = main.c registrar_rfcomm.c registrar_rfcomm.h
 all: all-am
@@ -226,7 +233,7 @@ clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 app$(EXEEXT): $(app_OBJECTS) $(app_DEPENDENCIES) $(EXTRA_app_DEPENDENCIES) 
 	@rm -f app$(EXEEXT)
-	$(LINK) $(app_OBJECTS) $(app_LDADD) $(LIBS)
+	$(app_LINK) $(app_OBJECTS) $(app_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -234,8 +241,8 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/registrar_rfcomm.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/app-main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/app-registrar_rfcomm.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -250,6 +257,34 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
+
+app-main.o: main.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -MT app-main.o -MD -MP -MF $(DEPDIR)/app-main.Tpo -c -o app-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/app-main.Tpo $(DEPDIR)/app-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='main.c' object='app-main.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -c -o app-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+
+app-main.obj: main.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -MT app-main.obj -MD -MP -MF $(DEPDIR)/app-main.Tpo -c -o app-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/app-main.Tpo $(DEPDIR)/app-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='main.c' object='app-main.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -c -o app-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
+
+app-registrar_rfcomm.o: registrar_rfcomm.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -MT app-registrar_rfcomm.o -MD -MP -MF $(DEPDIR)/app-registrar_rfcomm.Tpo -c -o app-registrar_rfcomm.o `test -f 'registrar_rfcomm.c' || echo '$(srcdir)/'`registrar_rfcomm.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/app-registrar_rfcomm.Tpo $(DEPDIR)/app-registrar_rfcomm.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='registrar_rfcomm.c' object='app-registrar_rfcomm.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -c -o app-registrar_rfcomm.o `test -f 'registrar_rfcomm.c' || echo '$(srcdir)/'`registrar_rfcomm.c
+
+app-registrar_rfcomm.obj: registrar_rfcomm.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -MT app-registrar_rfcomm.obj -MD -MP -MF $(DEPDIR)/app-registrar_rfcomm.Tpo -c -o app-registrar_rfcomm.obj `if test -f 'registrar_rfcomm.c'; then $(CYGPATH_W) 'registrar_rfcomm.c'; else $(CYGPATH_W) '$(srcdir)/registrar_rfcomm.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/app-registrar_rfcomm.Tpo $(DEPDIR)/app-registrar_rfcomm.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='registrar_rfcomm.c' object='app-registrar_rfcomm.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(app_CFLAGS) $(CFLAGS) -c -o app-registrar_rfcomm.obj `if test -f 'registrar_rfcomm.c'; then $(CYGPATH_W) 'registrar_rfcomm.c'; else $(CYGPATH_W) '$(srcdir)/registrar_rfcomm.c'; fi`
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
