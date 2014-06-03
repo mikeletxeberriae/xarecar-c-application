@@ -4,6 +4,7 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -18,13 +19,24 @@
 #include <bluetooth/l2cap.h>
 #include <pthread.h>
 #include "registrar_rfcomm.h"
-
+#include <semaphore.h>
 /*************************
 	CONSTANTES
 **************************/
 const int MAX_CONEXIONES=7; /*El bluetooth acepta unicamente 7 conexiones simultaneas, por ello el numero de sockets se limita a este valor*/
 //const char * FINALIZE = "finalize" //comando finalizar
 
+/**************************
+ * VARIABLES GLOBALES
+***************************/
+
+int numConexiones=0;
+int numKilometros=0;
+sem_t sem_conexiones;
+/*******************************
+ * DEFINICION DE LAS FUNCIONES
+ * 
+ *******************************/
 
 void * atender_clientes_bluetooth( void * arg );
 
@@ -36,7 +48,7 @@ void * atender_clientes_bluetooth( void * arg );
 int main(int argc, char **argv)
 {
     int port = 3;
-    sdp_session_t* session = register_service(port);
+    sdp_session_t* session;// = register_service(port);
     int dev_id;
     pthread_t lista_hilos[MAX_CONEXIONES] ;
     int i=0,j=0;
@@ -46,6 +58,13 @@ int main(int argc, char **argv)
     int s, client;
     socklen_t opt = sizeof(rem_addr);
     int r;
+    int conexiones=0;
+    
+    //Inicializar el mutex
+    sem_init(&sem_conexiones,0,1);
+   
+    //Iniciar el servicio
+    session = register_service(port);
 
     // allocate socket
     s = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
@@ -74,23 +93,36 @@ int main(int argc, char **argv)
 
     while(1)
     {
-    	// accept one connection
-    	printf("calling accept()\n");
-	client = accept(s, (struct sockaddr *)&rem_addr, &opt);
-	printf("accept() returned %d\n", client);
+	sem_wait(&sem_conexiones);
+	conexiones = numConexiones;
+	sem_post(&sem_conexiones);
+	
+	if(conexiones < MAX_CONEXIONES) //se controlan el numero de conexiones.
+	{
+	    // accept one connection
+	    printf("calling accept()\n");
+	    client = accept(s, (struct sockaddr *)&rem_addr, &opt);
+	    printf("accept() returned %d\n", client);
 
-	//convertir la direccion a string
-	ba2str( &rem_addr.rc_bdaddr, buf );
-	fprintf(stderr, "accepted connection from %s\n", buf);
-	memset(buf, 0, sizeof(buf));
-	
-	//guardar el numero de socket, para luego poder pasar la direccion de ese socket
-	idSockets[i]=client; 
-	
-	//Por cada socket crear un hilo, para encargarse de atender al cliente bluetooth
-        pthread_create (&lista_hilos[i] , NULL , atender_clientes_bluetooth ,&idSockets[i]); 
-	printf("Nº clientes conectados: %i\n",i+1);	
-	i++;
+	    //convertir la direccion a string
+	    ba2str( &rem_addr.rc_bdaddr, buf );
+	    fprintf(stderr, "accepted connection from %s\n", buf);
+	    memset(buf, 0, sizeof(buf));
+	    
+	    
+	    sem_wait(&sem_conexiones);
+	    conexiones = numConexiones;
+	    numConexiones++;
+	    sem_post(&sem_conexiones);
+	    
+	    //guardar el numero de socket, para luego poder pasar la direccion de ese socket
+	    idSockets[conexiones]=client; 
+	    
+	    //Por cada socket crear un hilo, para encargarse de atender al cliente bluetooth
+	    pthread_create (&lista_hilos[conexiones] , NULL , atender_clientes_bluetooth ,&idSockets[i]); 
+	    
+	    printf("Nº clientes conectados: %i\n",conexiones+1);
+	}
 
     }
 
@@ -116,30 +148,42 @@ int main(int argc, char **argv)
 */
 void * atender_clientes_bluetooth ( void * arg )
 {
-	int  *numSocket;
-	int  bytes_read;
-	char buf[1024] = { 0 };
+    int  *numSocket;
+    int  bytes_read;
+    char buffer_recepcion[1024] = { 0 };
+    char buffer_envio[128] = { 0 };
 
+    numSocket = (int *) arg;
 
-	numSocket = (int *) arg;
+    printf("Hilo atendendiendo socket %i\n",*numSocket);
+    
+    do
+    {
+	bytes_read = recv(*numSocket,buffer_recepcion,sizeof(buffer_recepcion),0);
+	printf("Socket %i ha recibido: %s\n",*numSocket, buffer_recepcion);
 
-	printf("Hilo atendendiendo socket %i\n",*numSocket);
-	
-	do
-	{
-		bytes_read = recv(*numSocket,buf,sizeof(buf),0);
-		printf("Socket %i ha recibido: %s\n",*numSocket, buf);
+    }while(strcmp(buffer_recepcion,"finalize")!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
+    
+    printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
+    /*Enviar precio del viaje al cliente*/
+    int coste = rand()%5;
+    sprintf(buffer_envio,"%i",coste);
+    bytes_read = send(*numSocket,buffer_envio,sizeof(buffer_envio),0);
+    printf("Coste: %s €\n",buffer_envio);
+    
+    sem_wait(&sem_conexiones);
+    numConexiones--; //se decrementa el numero de conexiones
+    sem_post(&sem_conexiones);
+    
+    /* Cerrar el socket */
+    close(*numSocket);
+    return NULL ;
+}
 
-	}while(strcmp(buf,"finalize")!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
-	
-	printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
-	/*Enviar precio del viaje al cliente*/
-	//bytes_read = send(*numSocket,buf,sizeof(buf),0);
-	
-
-	/* Cerrar el socket */
-	close(*numSocket);
-	return NULL ;
+void * lecturaDatosCoche(void * arg)
+{
+ 
+  
 }
 
 void arrancar_hilos()
@@ -149,8 +193,6 @@ void arrancar_hilos()
 
 
 	//Arrancar contador de peajes
-
-
 
 }
 
