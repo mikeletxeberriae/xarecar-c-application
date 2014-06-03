@@ -27,9 +27,10 @@
 	CONSTANTES
 **************************/
 const int MAX_CONEXIONES=7; /*El bluetooth acepta unicamente 7 conexiones simultaneas, por ello el numero de sockets se limita a este valor*/
-const char * COMANDO_LLEGADA = "finalize"; //comando finalizar
+const char * COMANDO_LLEGADA = "finalize"; 
 const char * COMANDO_START_LECTURA = "start";
 const int TIEMPO_PASO_KM = 10; //=segundos
+const float PRECIO_COMBUSTIBLE = 1.6741;
 
 /**************************
  * VARIABLES GLOBALES
@@ -62,22 +63,32 @@ void * lecturaDatosCoche(void * arg);
 *
 *******************************************/
 
+/**
+*@brief Esta es la funcion principal de la aplicacion. Se encarga de publicar el servicion de bluetooth, aceptar conexiones externas y asignar a cada conexion un hilo y de iniciar el hilo encargado de leer el kilometraje del coche.
+*@param argc. Numero de argumentos que ha recibido la funcion main
+*@param **argv. La lista de argumentos que ha recibido la funcion main
+*@return int. Devuelve un 0 si se ha ejecutado con normalidad.
+*/
 int main(int argc, char **argv)
 {
-    int port = 3;
-    sdp_session_t* session;
-    int dev_id;
-    pthread_t lista_hilos[MAX_CONEXIONES] ;
-    pthread_t hilo_lector_datos;
+    int port = 3,
+	dev_id,
+	i=0,
+	j=0,
+	s,
+	client,
+	r,
+	conexiones=0,
+	idSockets[MAX_CONEXIONES];
     
-    int i=0,j=0;
-    int idSockets[MAX_CONEXIONES];
-    struct sockaddr_rc loc_addr = { 0 }, rem_addr = { 0 };
+    sdp_session_t* session;
+    pthread_t lista_hilos[MAX_CONEXIONES],
+              hilo_lector_datos;
+    struct sockaddr_rc loc_addr = { 0 }, 
+		        rem_addr = { 0 };
     char buf[1024] = { 0 };
-    int s, client;
     socklen_t opt = sizeof(rem_addr);
-    int r;
-    int conexiones=0;
+
     
     //Inicializar semaforos
     sem_init(&sem_conexiones,0,1);
@@ -99,8 +110,8 @@ int main(int argc, char **argv)
     loc_addr.rc_bdaddr = *BDADDR_ANY;
     loc_addr.rc_channel = (uint8_t) port;
     
-    
-    dev_id = hci_get_route(NULL); //Obtener la id del dispositivo bluetooth local
+    //Comprobacion del adaptador local de bluetooth
+    dev_id = hci_get_route(NULL); //Con el parametro NULL devuelve la id del dispositivo bluetooth local
     printf("dev_id = %i\n",dev_id); 
     if (dev_id < 0) 
     { 
@@ -108,10 +119,12 @@ int main(int argc, char **argv)
 	exit(1); 
 
     }
+    
+    //Bind
     r = bind(s, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
     printf("bind() on channel %d returned %d\n", port, r);
 
-    // put socket into listening mode
+    //put socket into listening mode
     r = listen(s, 1);
     printf("listen() returned %d\n", r);
 
@@ -166,7 +179,7 @@ int main(int argc, char **argv)
 }
 
 /**
-*@brief Esta es la funcion que ejecutará cada hilo
+*@brief Esta es la funcion que ejecutará cada hilo, encargado de atender a una de las conexiones del cliente. Se encarga de recoger el kilometro inicial y la final para que le calcule el coste del viaje al cliante una vez llegado al destino (indicando con el comando "finalize"). Si el cliente es el conductor este le puede enviar un start para iniciar la lectura.
 *@param arg. En este parametro se recogen los argumentos que se le hayan pasado a la funcion pthread_create()
 *@return void*. Esta funcion puede devolver cualquier valor, el cual luego por ejemplo es posible utilizar para conocer si la funcion se ha ejecutado correctamente
 */
@@ -176,10 +189,16 @@ void * atender_clientes_bluetooth ( void * arg )
     int  bytes_read;
     char buffer_recepcion[1024] = { 0 };
     char buffer_envio[128] = { 0 };
-    int coste=0;
+    float coste=0;
+    int kmInicial=0, kmFinal=0;
     numSocket = (int *) arg;
 
     printf("Hilo atendendiendo socket %i\n",*numSocket);
+    
+    
+    sem_wait(&sem_kilometros);
+    kmInicial=numKilometros;
+    sem_post(&sem_kilometros);
     
     do
     {
@@ -193,15 +212,20 @@ void * atender_clientes_bluetooth ( void * arg )
 	    start=1;
 	    sem_post(&sem_start);
 	}
-      
 	
     }while(strcmp(buffer_recepcion,COMANDO_LLEGADA)!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
     
+    
+    sem_wait(&sem_kilometros);
+    kmFinal=numKilometros;
+    sem_post(&sem_kilometros);
+    
+    printf("kilometro inicial: %i \n kilometro final: %i\n",kmInicial,kmFinal);
     /*Calcular el coste*/
-    coste = rand()%5;
+    coste = (float)((kmFinal-kmInicial)*PRECIO_COMBUSTIBLE);
     
     /*Enviar precio del viaje al cliente*/
-    sprintf(buffer_envio,"%i",coste);
+    sprintf(buffer_envio,"%f",coste);
     bytes_read = send(*numSocket,buffer_envio,sizeof(buffer_envio),0);
     printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
     printf("Coste: %s €\n",buffer_envio);
@@ -215,6 +239,11 @@ void * atender_clientes_bluetooth ( void * arg )
     return NULL ;
 }
 
+/**
+*@brief Esta es la funcion que ejecutará el hilo encardado de realizar la lectura. Se simula la lectura con el incremento de un contador que indica el numero de kilometros realizados.
+*@param arg. En este parametro se recogen los argumentos que se le hayan pasado a la funcion pthread_create(), a este hilo no se le ha asignado ningun parametro.
+*@return void*. Esta funcion puede devolver cualquier valor, el cual luego por ejemplo es posible utilizar para conocer si la funcion se ha ejecutado correctamente
+*/
 void * lecturaDatosCoche(void * arg)
 {
   int kilometroActual=0;
@@ -241,14 +270,3 @@ void * lecturaDatosCoche(void * arg)
   }
       return NULL;
 }
-
-void arrancar_hilos()
-{
-
-	//Arrancar hilo cuenta kilometros
-
-
-	//Arrancar contador de peajes
-
-}
-
