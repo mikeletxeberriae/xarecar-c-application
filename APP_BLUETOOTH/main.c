@@ -20,11 +20,16 @@
 #include <pthread.h>
 #include "registrar_rfcomm.h"
 #include <semaphore.h>
+
+
+
 /*************************
 	CONSTANTES
 **************************/
 const int MAX_CONEXIONES=7; /*El bluetooth acepta unicamente 7 conexiones simultaneas, por ello el numero de sockets se limita a este valor*/
-//const char * FINALIZE = "finalize" //comando finalizar
+const char * COMANDO_LLEGADA = "finalize"; //comando finalizar
+const char * COMANDO_START_LECTURA = "start";
+const int TIEMPO_PASO_KM = 10; //=segundos
 
 /**************************
  * VARIABLES GLOBALES
@@ -32,13 +37,25 @@ const int MAX_CONEXIONES=7; /*El bluetooth acepta unicamente 7 conexiones simult
 
 int numConexiones=0;
 int numKilometros=0;
+int start=0;
+
+//semaforos
 sem_t sem_conexiones;
+sem_t sem_kilometros;
+sem_t sem_start;
+
+
+
+
 /*******************************
  * DEFINICION DE LAS FUNCIONES
  * 
  *******************************/
 
 void * atender_clientes_bluetooth( void * arg );
+void * lecturaDatosCoche(void * arg);
+
+
 
 /******************************************
 * IMPLEMENTACION DE LAS FUNCIONES
@@ -48,9 +65,11 @@ void * atender_clientes_bluetooth( void * arg );
 int main(int argc, char **argv)
 {
     int port = 3;
-    sdp_session_t* session;// = register_service(port);
+    sdp_session_t* session;
     int dev_id;
     pthread_t lista_hilos[MAX_CONEXIONES] ;
+    pthread_t hilo_lector_datos;
+    
     int i=0,j=0;
     int idSockets[MAX_CONEXIONES];
     struct sockaddr_rc loc_addr = { 0 }, rem_addr = { 0 };
@@ -60,9 +79,14 @@ int main(int argc, char **argv)
     int r;
     int conexiones=0;
     
-    //Inicializar el mutex
+    //Inicializar semaforos
     sem_init(&sem_conexiones,0,1);
-   
+    sem_init(&sem_kilometros,0,1);
+    sem_init(&sem_start,0,1);
+    
+    //Crear hilo lector de datos
+    pthread_create (&hilo_lector_datos , NULL , lecturaDatosCoche ,NULL); 
+    
     //Iniciar el servicio
     session = register_service(port);
 
@@ -152,7 +176,7 @@ void * atender_clientes_bluetooth ( void * arg )
     int  bytes_read;
     char buffer_recepcion[1024] = { 0 };
     char buffer_envio[128] = { 0 };
-
+    int coste=0;
     numSocket = (int *) arg;
 
     printf("Hilo atendendiendo socket %i\n",*numSocket);
@@ -162,13 +186,24 @@ void * atender_clientes_bluetooth ( void * arg )
 	bytes_read = recv(*numSocket,buffer_recepcion,sizeof(buffer_recepcion),0);
 	printf("Socket %i ha recibido: %s\n",*numSocket, buffer_recepcion);
 
-    }while(strcmp(buffer_recepcion,"finalize")!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
+	if(strcmp(buffer_recepcion,COMANDO_START_LECTURA)==0)
+	{
+	    printf("¡Se ha recibido start!\n");
+	    sem_wait(&sem_start);
+	    start=1;
+	    sem_post(&sem_start);
+	}
+      
+	
+    }while(strcmp(buffer_recepcion,COMANDO_LLEGADA)!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
     
-    printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
+    /*Calcular el coste*/
+    coste = rand()%5;
+    
     /*Enviar precio del viaje al cliente*/
-    int coste = rand()%5;
     sprintf(buffer_envio,"%i",coste);
     bytes_read = send(*numSocket,buffer_envio,sizeof(buffer_envio),0);
+    printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
     printf("Coste: %s €\n",buffer_envio);
     
     sem_wait(&sem_conexiones);
@@ -182,8 +217,29 @@ void * atender_clientes_bluetooth ( void * arg )
 
 void * lecturaDatosCoche(void * arg)
 {
- 
+  int kilometroActual=0;
+  int start_local=0;
   
+  printf("Hilo lector en marcha, esperando comando 'start'...\n");
+  while(1)
+  {
+      sem_wait(&sem_start);
+      start_local=start;
+      sem_post(&sem_start);
+      
+      if(start_local==1)
+      {
+	printf("Leyendo kilometro actual: %i\n", kilometroActual);
+	sem_wait(&sem_kilometros);
+	numKilometros++;
+	kilometroActual=numKilometros;
+	sem_post(&sem_kilometros);
+	
+	sleep(TIEMPO_PASO_KM);
+	
+      }
+  }
+      return NULL;
 }
 
 void arrancar_hilos()
