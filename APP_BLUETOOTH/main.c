@@ -78,7 +78,6 @@ int main(int argc, char **argv)
 	s,
 	client,
 	r,
-	conexiones=0,
 	idSockets[MAX_CONEXIONES];
     
     sdp_session_t* session;
@@ -131,11 +130,11 @@ int main(int argc, char **argv)
     while(1)
     {
 	sem_wait(&sem_conexiones);
-	conexiones = numConexiones;
-	sem_post(&sem_conexiones);
 	
-	if(conexiones < MAX_CONEXIONES) //se controlan el numero de conexiones.
+	if(numConexiones < MAX_CONEXIONES) //se controlan el numero de conexiones.
 	{
+	    sem_post(&sem_conexiones);
+	    
 	    // accept one connection
 	    printf("calling accept()\n");
 	    client = accept(s, (struct sockaddr *)&rem_addr, &opt);
@@ -148,18 +147,16 @@ int main(int argc, char **argv)
 	    
 	    
 	    sem_wait(&sem_conexiones);
-	    conexiones = numConexiones;
-	    numConexiones++;
-	    sem_post(&sem_conexiones);
-	    
 	    //guardar el numero de socket, para luego poder pasar la direccion de ese socket
-	    idSockets[conexiones]=client; 
+	    idSockets[numConexiones]=client; 
 	    
 	    //Por cada socket crear un hilo, para encargarse de atender al cliente bluetooth
-	    pthread_create (&lista_hilos[conexiones] , NULL , atender_clientes_bluetooth ,&idSockets[i]); 
+	    pthread_create (&lista_hilos[numConexiones] , NULL , atender_clientes_bluetooth ,&idSockets[numConexiones]); 
 	    
-	    printf("Nº clientes conectados: %i\n",conexiones+1);
+	    printf("Nº clientes conectados: %i\n",numConexiones+1);
+	    numConexiones++;
 	}
+	sem_post(&sem_conexiones);
 
     }
 
@@ -225,7 +222,7 @@ void * atender_clientes_bluetooth ( void * arg )
     coste = (float)((kmFinal-kmInicial)*PRECIO_COMBUSTIBLE);
     
     /*Enviar precio del viaje al cliente*/
-    sprintf(buffer_envio,"%f",coste);
+    sprintf(buffer_envio,"%f€",coste);
     bytes_read = send(*numSocket,buffer_envio,sizeof(buffer_envio),0);
     printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
     printf("Coste: %s €\n",buffer_envio);
@@ -253,19 +250,21 @@ void * lecturaDatosCoche(void * arg)
   while(1)
   {
       sem_wait(&sem_start);
-      start_local=start;
-      sem_post(&sem_start);
-      
-      if(start_local==1)
+      if(start==1)
       {
-	printf("Leyendo kilometro actual: %i\n", kilometroActual);
+	sem_post(&sem_start);
+	
 	sem_wait(&sem_kilometros);
+	printf("Leyendo kilometro actual: %i\n", numKilometros);
 	numKilometros++;
-	kilometroActual=numKilometros;
 	sem_post(&sem_kilometros);
 	
 	sleep(TIEMPO_PASO_KM);
 	
+      }
+      else
+      {
+	sem_post(&sem_start);
       }
   }
       return NULL;
