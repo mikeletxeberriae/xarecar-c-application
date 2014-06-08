@@ -39,7 +39,7 @@ typedef struct datos_conexion
 const char * COMANDO_LLEGADA = "finalize"; 
 const char * COMANDO_START_LECTURA = "start";
 const int TIEMPO_PASO_KM = 10; //=segundos
-const float PRECIO_COMBUSTIBLE = 1.6741;
+const float PRECIO_COMBUSTIBLE = 0.05; //euros
 
 /**************************
  * VARIABLES GLOBALES
@@ -48,14 +48,16 @@ const float PRECIO_COMBUSTIBLE = 1.6741;
 int numConexiones=0;
 int numKilometros=0;
 int start=0;
-int cambio_conexion=0;
+int nueva_conexion=0;
+int salida_conexion=0;
 float costePorUsuarios[MAX_CONEXIONES]; //con const int MAX_CONEXIONES falla por ello se ha puesto #define MAX_CONEXIONES
 
 //semaforos
 sem_t sem_conexiones;
 sem_t sem_kilometros;
 sem_t sem_start;
-sem_t sem_cambio_conexion;
+sem_t sem_nueva_conexion;
+sem_t sem_salida_conexion;
 sem_t sem_costePorUsuarios;
 sem_t sem_esperarCoste;
 
@@ -105,9 +107,10 @@ int main(int argc, char **argv)
     sem_init(&sem_conexiones,0,1);
     sem_init(&sem_kilometros,0,1);
     sem_init(&sem_start,0,1);
-    sem_init(&sem_cambio_conexion,0,1);
+    sem_init(&sem_nueva_conexion,0,1);
+    sem_init(&sem_salida_conexion,0,1);
     sem_init(&sem_costePorUsuarios,0,1);
-    sem_init(&sem_esperarCoste,0,-1);
+    sem_init(&sem_esperarCoste,0,0);
     
     //Crear hilo lector de datos
     pthread_create (&hilo_lector_datos , NULL , lecturaDatosCoche ,NULL); 
@@ -214,19 +217,14 @@ void * atender_clientes_bluetooth ( void * arg )
     char buffer_recepcion[1024] = { 0 };
     char buffer_envio[128] = { 0 };
     float coste=0;
-    int kmInicial=0, kmFinal=0;
+    
     datosConexion = (DATOS_CONEXION *) arg;
 
     printf("Hilo atendendiendo socket %i\n",datosConexion->num_socket_conexion);
-    
-    
-    sem_wait(&sem_kilometros);
-    kmInicial=numKilometros;
-    sem_post(&sem_kilometros);
-    
-    sem_wait(&sem_cambio_conexion);
-    cambio_conexion=1;
-    sem_post(&sem_cambio_conexion);
+
+    sem_wait(&sem_nueva_conexion);
+    nueva_conexion=1;
+    sem_post(&sem_nueva_conexion);
     do
     {
 	bytes_read = recv(datosConexion->num_socket_conexion,buffer_recepcion,sizeof(buffer_recepcion),0);
@@ -242,19 +240,11 @@ void * atender_clientes_bluetooth ( void * arg )
 	}
 	
     }while(strcmp(buffer_recepcion,COMANDO_LLEGADA)!=0); /* Comprobar que el cliente no llegue al final. (final indicado con "finalize")*/
+
+    sem_wait(&sem_salida_conexion);
+    salida_conexion=1;
+    sem_post(&sem_salida_conexion);
     
-    /*
-    sem_wait(&sem_kilometros);
-    kmFinal=numKilometros;
-    sem_post(&sem_kilometros);
-    */
-    sem_wait(&sem_cambio_conexion);
-    cambio_conexion=1;
-    sem_post(&sem_cambio_conexion);
-    
-   // printf("kilometro inicial: %i \n kilometro final: %i\n",kmInicial,kmFinal);
-    /*Calcular el coste*/
-    //coste = (float)((kmFinal-kmInicial)*PRECIO_COMBUSTIBLE);
     printf("Esperando coste... ... ...\n");
 
     sem_wait(&sem_esperarCoste);
@@ -264,7 +254,7 @@ void * atender_clientes_bluetooth ( void * arg )
     sem_post(&sem_costePorUsuarios);
     
     /*Enviar precio del viaje al cliente*/
-    sprintf(buffer_envio,"%f€",coste);
+    sprintf(buffer_envio,"%.2f",coste);
     bytes_read = send(datosConexion->num_socket_conexion,buffer_envio,sizeof(buffer_envio),0);
     printf("El pasajero a llegado al destino.\n Enviando coste... ... ...\n");
     printf("Coste: %s €\n",buffer_envio);
@@ -321,43 +311,90 @@ void * calculadorCoste(void * arg)
   while(1)
   {
     //Semaforo_cambio
-    sem_wait(&sem_cambio_conexion);
-    if(cambio_conexion==1)
+    sem_wait(&sem_nueva_conexion);
+    if(nueva_conexion==1)
     {
-      cambio_conexion=0;
-      sem_post(&sem_cambio_conexion);
+      nueva_conexion=0;
       
-      //Semaforo_numKilometros
-      sem_wait(&sem_kilometros);
-      
+      sem_post(&sem_nueva_conexion);
+     
       //Semaforo_numConexiones
       sem_wait(&sem_conexiones);
-      printf("Conexiones : %i\n",numConexiones);
-      costeIndividual = (float)((numKilometros*PRECIO_COMBUSTIBLE)/(numConexiones));
-      sem_post(&sem_esperarCoste);
-      printf("Calculado el coste... ... ...\n");
+
+      if(numConexiones-1>0)
+      {
+	//Semaforo_numKilometros
+	sem_wait(&sem_kilometros);
+	costeIndividual = (float)((numKilometros*PRECIO_COMBUSTIBLE)/(numConexiones-1));
+	printf("Calculado el coste... ... ...\n");
+	sem_post(&sem_kilometros);
+      
+	sem_wait(&sem_costePorUsuarios);
+	
+	for(i=0;i<numConexiones-1;i++) //-1 porque no se tiene en cuenta la nueva conexion
+	{
+	  
+	  costePorUsuarios[i] = costePorUsuarios[i] + costeIndividual;
+	  
+	}
+	sem_post(&sem_costePorUsuarios);
+	
+	printf("Coste individual: %.2f\n",costeIndividual);
+      }
+      
+      sem_post(&sem_conexiones);
+      
+      sem_wait(&sem_kilometros);
       numKilometros=0;
       sem_post(&sem_kilometros);
-      //numKilometros
-      printf("Coste individual: %f\n",costeIndividual);
-      
-      //semaforo_costeUsuarios
-      sem_wait(&sem_costePorUsuarios);
-      for(i=0;i<=numConexiones-1;i++)
-      {
-	
-	costePorUsuarios[i] = costePorUsuarios[i] + costeIndividual;
-	
-      }
-      //costeUsuario
-      sem_post(&sem_costePorUsuarios);
-      sem_post(&sem_conexiones);
       
 
     }
     else
     {
-      sem_post(&sem_cambio_conexion);
+      sem_post(&sem_nueva_conexion);
+    }
+    
+    
+    sem_wait(&sem_salida_conexion);
+    if(salida_conexion==1)
+    {
+
+      salida_conexion=0;
+      
+      sem_post(&sem_salida_conexion);
+      
+      //Semaforo_numKilometros
+      sem_wait(&sem_kilometros);
+      //Semaforo_numConexiones
+      sem_wait(&sem_conexiones);
+      printf("Conexiones : %i\n",numConexiones);
+      costeIndividual = (float)((numKilometros*PRECIO_COMBUSTIBLE)/(numConexiones));
+      
+      printf("Calculado el coste... ... ...\n");
+
+      numKilometros=0;
+      sem_post(&sem_kilometros);
+      //numKilometros
+      printf("Coste individual: %.2f\n",costeIndividual);
+      
+      //semaforo_costeUsuarios
+      sem_wait(&sem_costePorUsuarios);
+      for(i=0;i<numConexiones;i++)
+      {
+	
+	costePorUsuarios[i] = costePorUsuarios[i] + costeIndividual;
+	
+      }
+      sem_post(&sem_esperarCoste);
+      //costeUsuario
+      sem_post(&sem_costePorUsuarios);
+      sem_post(&sem_conexiones);
+      
+    }
+    else
+    {
+      sem_post(&sem_salida_conexion);
     }
     //cambio
   }
