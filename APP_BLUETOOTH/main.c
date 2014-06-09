@@ -299,7 +299,11 @@ void * lecturaDatosCoche(void * arg)
   }
       return NULL;
 }
-
+/**
+*@brief Esta es la funcion que ejecutará el hilo encardado de calcular el coste de cada pasajero. Controla la conexion y desconexion de los clientes. En cada uno de los instantes actualiza el coste de cada pasajeros.
+*@param arg. En este parametro se recogen los argumentos que se le hayan pasado a la funcion pthread_create(), a este hilo no se le ha asignado ningun parametro.
+*@return void*. Esta funcion puede devolver cualquier valor, el cual luego por ejemplo es posible utilizar para conocer si la funcion se ha ejecutado correctamente
+*/
 void * calculadorCoste(void * arg)
 {
   float costeIndividual=0;
@@ -310,20 +314,18 @@ void * calculadorCoste(void * arg)
   
   while(1)
   {
-    //Semaforo_cambio
+    //Comprobar si se ha conectado algun pasajero
     sem_wait(&sem_nueva_conexion);
     if(nueva_conexion==1)
     {
       nueva_conexion=0;
       
       sem_post(&sem_nueva_conexion);
-     
-      //Semaforo_numConexiones
+ 
       sem_wait(&sem_conexiones);
 
-      if(numConexiones-1>0)
+      if(numConexiones-1>0) //Si es la primera conexion no se calcula el coste. Si antes de esta nueva conexion habia mas conexiones, se calcula su coste
       {
-	//Semaforo_numKilometros
 	sem_wait(&sem_kilometros);
 	costeIndividual = (float)((numKilometros*PRECIO_COMBUSTIBLE)/(numConexiones-1));
 	printf("Calculado el coste... ... ...\n");
@@ -355,7 +357,7 @@ void * calculadorCoste(void * arg)
       sem_post(&sem_nueva_conexion);
     }
     
-    
+    //Comprobar si se ha desconectado algun pasajero
     sem_wait(&sem_salida_conexion);
     if(salida_conexion==1)
     {
@@ -364,9 +366,8 @@ void * calculadorCoste(void * arg)
       
       sem_post(&sem_salida_conexion);
       
-      //Semaforo_numKilometros
       sem_wait(&sem_kilometros);
-      //Semaforo_numConexiones
+
       sem_wait(&sem_conexiones);
       printf("Conexiones : %i\n",numConexiones);
       costeIndividual = (float)((numKilometros*PRECIO_COMBUSTIBLE)/(numConexiones));
@@ -375,10 +376,9 @@ void * calculadorCoste(void * arg)
 
       numKilometros=0;
       sem_post(&sem_kilometros);
-      //numKilometros
+  
       printf("Coste individual: %.2f\n",costeIndividual);
       
-      //semaforo_costeUsuarios
       sem_wait(&sem_costePorUsuarios);
       for(i=0;i<numConexiones;i++)
       {
@@ -386,9 +386,11 @@ void * calculadorCoste(void * arg)
 	costePorUsuarios[i] = costePorUsuarios[i] + costeIndividual;
 	
       }
-      sem_post(&sem_esperarCoste);
-      //costeUsuario
+
       sem_post(&sem_costePorUsuarios);
+      
+      //Avisar de que se ha actualizado el coste
+      sem_post(&sem_esperarCoste);
       sem_post(&sem_conexiones);
       
     }
@@ -396,7 +398,7 @@ void * calculadorCoste(void * arg)
     {
       sem_post(&sem_salida_conexion);
     }
-    //cambio
+    
   }
   
   return NULL;
